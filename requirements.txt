@@ -1,4 +1,6 @@
 openai-whisper
 ffmpeg-python
 fpdf2
+customtkinter
+packaging
 torch
