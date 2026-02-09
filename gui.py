@@ -1,6 +1,7 @@
 """GUI application for the M3U8 Transcript Generator."""
 
 import logging
+import os
 import threading
 
 import customtkinter as ctk
@@ -13,8 +14,15 @@ from writers import SUPPORTED_FORMATS
 setup_logging()
 log = logging.getLogger(__name__)
 
-ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
+
+# Accent colours
+_ACCENT = "#3B8ED0"
+_ACCENT_HOVER = "#2B7BBF"
+_SUCCESS = "#2FA572"
+_DANGER = "#D9534F"
+_DANGER_HOVER = "#C9302C"
+_MUTED = "#6B7280"
 
 
 class TranscriptApp(ctk.CTk):
@@ -25,136 +33,204 @@ class TranscriptApp(ctk.CTk):
 
         self._cancel_event = threading.Event()
 
+        # ── Window setup ─────────────────────────────────────────────
         self.title("M3U8 Transcript Generator")
-        self.geometry("620x600")
-        self.minsize(520, 550)
-
+        self.geometry("660x720")
+        self.minsize(580, 660)
         self.grid_columnconfigure(0, weight=1)
+
+        # Use system preference (Dark/Light) by default
+        ctk.set_appearance_mode("System")
 
         row = 0
 
-        # Header
-        self.header_label = ctk.CTkLabel(
-            self, text="M3U8 Transcript Generator",
-            font=ctk.CTkFont(size=20, weight="bold"),
+        # ── Title bar area ───────────────────────────────────────────
+        title_frame = ctk.CTkFrame(self, fg_color="transparent")
+        title_frame.grid(row=row, column=0, padx=20, pady=(18, 0), sticky="ew")
+        title_frame.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            title_frame, text="M3U8 Transcript Generator",
+            font=ctk.CTkFont(size=22, weight="bold"),
+        ).grid(row=0, column=0, sticky="w")
+
+        self.appearance_toggle = ctk.CTkSegmentedButton(
+            title_frame, values=["System", "Dark", "Light"],
+            command=self._change_appearance,
+            font=ctk.CTkFont(size=12),
         )
-        self.header_label.grid(row=row, column=0, padx=20, pady=(20, 10))
+        self.appearance_toggle.set("System")
+        self.appearance_toggle.grid(row=0, column=1, sticky="e")
+
+        ctk.CTkLabel(
+            title_frame,
+            text="Download, transcribe, and export m3u8 streams in seconds.",
+            font=ctk.CTkFont(size=13),
+            text_color=_MUTED,
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
         row += 1
 
-        # URL Input
-        self.url_entry = ctk.CTkEntry(self, placeholder_text="Enter M3U8 URL")
-        self.url_entry.grid(row=row, column=0, padx=20, pady=10, sticky="ew")
+        # ── URL Input ────────────────────────────────────────────────
+        url_frame = ctk.CTkFrame(self, fg_color="transparent")
+        url_frame.grid(row=row, column=0, padx=20, pady=(14, 0), sticky="ew")
+        url_frame.grid_columnconfigure(0, weight=1)
         row += 1
 
-        # ---- Options Frame ----
-        self.options_frame = ctk.CTkFrame(self)
-        self.options_frame.grid(row=row, column=0, padx=20, pady=10, sticky="ew")
-        self.options_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
-        row += 1
-
-        # Model Selection
-        ctk.CTkLabel(self.options_frame, text="Model:").grid(
-            row=0, column=0, padx=(10, 2), pady=10, sticky="w",
+        ctk.CTkLabel(url_frame, text="Stream URL", font=ctk.CTkFont(size=13, weight="bold")).grid(
+            row=0, column=0, sticky="w", pady=(0, 4),
         )
-        self.model_option_menu = ctk.CTkOptionMenu(
-            self.options_frame,
+        self.url_entry = ctk.CTkEntry(
+            url_frame, placeholder_text="https://example.com/stream/playlist.m3u8",
+            height=38,
+        )
+        self.url_entry.grid(row=1, column=0, sticky="ew")
+
+        # ── Options Card ─────────────────────────────────────────────
+        self.options_card = ctk.CTkFrame(self, corner_radius=12)
+        self.options_card.grid(row=row, column=0, padx=20, pady=(14, 0), sticky="ew")
+        self.options_card.grid_columnconfigure((0, 1, 2, 3), weight=1)
+        row += 1
+
+        # Row 0: Model + Format
+        ctk.CTkLabel(
+            self.options_card, text="Model", font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=0, column=0, padx=(14, 4), pady=(14, 2), sticky="w")
+
+        self.model_menu = ctk.CTkOptionMenu(
+            self.options_card,
             values=["tiny", "base", "small", "medium", "large"],
+            height=32,
         )
-        self.model_option_menu.set("base")
-        self.model_option_menu.grid(row=0, column=1, padx=5, pady=10, sticky="ew")
+        self.model_menu.set("base")
+        self.model_menu.grid(row=0, column=1, padx=4, pady=(14, 2), sticky="ew")
 
-        # Format Selection
-        ctk.CTkLabel(self.options_frame, text="Format:").grid(
-            row=0, column=2, padx=(10, 2), pady=10, sticky="w",
-        )
-        self.format_option_menu = ctk.CTkOptionMenu(
-            self.options_frame,
+        ctk.CTkLabel(
+            self.options_card, text="Format", font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=0, column=2, padx=(14, 4), pady=(14, 2), sticky="w")
+
+        self.format_menu = ctk.CTkOptionMenu(
+            self.options_card,
             values=sorted(SUPPORTED_FORMATS),
+            height=32,
         )
-        self.format_option_menu.set("pdf")
-        self.format_option_menu.grid(row=0, column=3, padx=(5, 10), pady=10, sticky="ew")
+        self.format_menu.set("pdf")
+        self.format_menu.grid(row=0, column=3, padx=(4, 14), pady=(14, 2), sticky="ew")
 
-        # Language Input
-        ctk.CTkLabel(self.options_frame, text="Language:").grid(
-            row=1, column=0, padx=(10, 2), pady=10, sticky="w",
-        )
+        # Row 1: Language + Keep Audio
+        ctk.CTkLabel(
+            self.options_card, text="Language", font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=1, column=0, padx=(14, 4), pady=(8, 2), sticky="w")
+
         self.language_entry = ctk.CTkEntry(
-            self.options_frame,
-            placeholder_text="auto (e.g. en, fr, es)",
-            width=120,
+            self.options_card, placeholder_text="auto  (en, fr, es ...)",
+            height=32,
         )
-        self.language_entry.grid(row=1, column=1, padx=5, pady=10, sticky="ew")
+        self.language_entry.grid(row=1, column=1, padx=4, pady=(8, 2), sticky="ew")
 
-        # Keep Audio Checkbox
-        self.keep_audio_checkbox = ctk.CTkCheckBox(
-            self.options_frame, text="Keep Audio File",
+        self.keep_audio_switch = ctk.CTkSwitch(
+            self.options_card, text="Keep audio file",
+            font=ctk.CTkFont(size=12),
         )
-        self.keep_audio_checkbox.grid(row=1, column=2, columnspan=2, padx=10, pady=10)
+        self.keep_audio_switch.grid(
+            row=1, column=2, columnspan=2, padx=14, pady=(8, 2), sticky="w",
+        )
 
-        # ---- Output File Selection ----
-        self.output_frame = ctk.CTkFrame(self)
-        self.output_frame.grid(row=row, column=0, padx=20, pady=5, sticky="ew")
-        self.output_frame.grid_columnconfigure(0, weight=1)
-        row += 1
+        # Row 2: Output path
+        ctk.CTkLabel(
+            self.options_card, text="Save to", font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=2, column=0, padx=(14, 4), pady=(8, 14), sticky="w")
 
         self.output_entry = ctk.CTkEntry(
-            self.output_frame,
-            placeholder_text="Default: transcripts/transcript_<timestamp>.<fmt>",
+            self.options_card,
+            placeholder_text="transcripts/transcript_<timestamp>.<fmt>",
+            height=32,
         )
-        self.output_entry.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
+        self.output_entry.grid(row=2, column=1, columnspan=2, padx=4, pady=(8, 14), sticky="ew")
 
         self.browse_button = ctk.CTkButton(
-            self.output_frame, text="Save As...", width=100,
-            command=self.browse_output_file,
+            self.options_card, text="Browse",
+            width=80, height=32,
+            command=self._browse_output,
         )
-        self.browse_button.grid(row=0, column=1, padx=10, pady=10)
+        self.browse_button.grid(row=2, column=3, padx=(4, 14), pady=(8, 14), sticky="ew")
 
-        # ---- Progress Bar ----
-        self.progress_bar = ctk.CTkProgressBar(self)
-        self.progress_bar.grid(row=row, column=0, padx=20, pady=(10, 5), sticky="ew")
+        # ── Action buttons ───────────────────────────────────────────
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.grid(row=row, column=0, padx=20, pady=(16, 0), sticky="ew")
+        btn_frame.grid_columnconfigure(0, weight=1)
+        row += 1
+
+        self.generate_btn = ctk.CTkButton(
+            btn_frame, text="Generate Transcript",
+            height=42, font=ctk.CTkFont(size=14, weight="bold"),
+            command=self._start_generation,
+        )
+        self.generate_btn.grid(row=0, column=0, sticky="ew")
+
+        self.cancel_btn = ctk.CTkButton(
+            btn_frame, text="Cancel", width=90, height=42,
+            fg_color=_MUTED, hover_color=_DANGER_HOVER,
+            state="disabled",
+            command=self._request_cancel,
+        )
+        self.cancel_btn.grid(row=0, column=1, padx=(10, 0))
+
+        # ── Progress bar ─────────────────────────────────────────────
+        self.progress_bar = ctk.CTkProgressBar(self, height=6, corner_radius=3)
+        self.progress_bar.grid(row=row, column=0, padx=20, pady=(12, 0), sticky="ew")
         self.progress_bar.set(0)
         row += 1
 
-        # ---- Buttons Frame ----
-        self.buttons_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.buttons_frame.grid(row=row, column=0, padx=20, pady=10)
+        # ── Log / status box ────────────────────────────────────────
+        log_label_frame = ctk.CTkFrame(self, fg_color="transparent")
+        log_label_frame.grid(row=row, column=0, padx=20, pady=(10, 0), sticky="ew")
         row += 1
 
-        self.generate_button = ctk.CTkButton(
-            self.buttons_frame, text="Generate Transcript",
-            command=self.start_generation_thread,
-        )
-        self.generate_button.grid(row=0, column=0, padx=10)
+        ctk.CTkLabel(
+            log_label_frame, text="Output Log",
+            font=ctk.CTkFont(size=12, weight="bold"), text_color=_MUTED,
+        ).pack(anchor="w")
 
-        self.cancel_button = ctk.CTkButton(
-            self.buttons_frame, text="Cancel",
-            command=self._request_cancel,
-            state="disabled",
-            fg_color="gray",
+        self.log_box = ctk.CTkTextbox(
+            self, height=120, corner_radius=10, font=ctk.CTkFont(size=12),
+            state="disabled", wrap="word",
         )
-        self.cancel_button.grid(row=0, column=1, padx=10)
-
-        # ---- Status Label ----
-        self.status_label = ctk.CTkLabel(self, text="Ready", text_color="gray")
-        self.status_label.grid(row=row, column=0, padx=20, pady=(0, 10))
-        row += 1
-
-        # ---- Footer ----
-        self.footer_label = ctk.CTkLabel(
-            self, text="Made by Pierre Guirguis with love",
-            font=ctk.CTkFont(size=12, slant="italic"),
-        )
-        self.footer_label.grid(row=row, column=0, padx=20, pady=10, sticky="s")
+        self.log_box.grid(row=row, column=0, padx=20, pady=(4, 0), sticky="nsew")
         self.grid_rowconfigure(row, weight=1)
+        row += 1
+
+        # ── Status bar ───────────────────────────────────────────────
+        status_frame = ctk.CTkFrame(self, fg_color="transparent")
+        status_frame.grid(row=row, column=0, padx=20, pady=(6, 10), sticky="ew")
+        status_frame.grid_columnconfigure(0, weight=1)
+
+        self.status_label = ctk.CTkLabel(
+            status_frame, text="Ready", text_color=_MUTED,
+            font=ctk.CTkFont(size=12),
+            anchor="w",
+        )
+        self.status_label.grid(row=0, column=0, sticky="w")
+
+        ctk.CTkLabel(
+            status_frame, text="Made by Pierre Guirguis with love",
+            font=ctk.CTkFont(size=11, slant="italic"), text_color=_MUTED,
+        ).grid(row=0, column=1, sticky="e")
+
+    # ------------------------------------------------------------------
+    # Theme toggle
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _change_appearance(mode: str) -> None:
+        ctk.set_appearance_mode(mode)
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
-    def browse_output_file(self) -> None:
-        fmt = self.format_option_menu.get()
-        ext_map = {"pdf": ".pdf", "srt": ".srt", "txt": ".txt"}
-        ext = ext_map.get(fmt, ".pdf")
+    def _browse_output(self) -> None:
+        fmt = self.format_menu.get()
+        ext = {"pdf": ".pdf", "srt": ".srt", "txt": ".txt"}.get(fmt, ".pdf")
         filename = ctk.filedialog.asksaveasfilename(
             defaultextension=ext,
             filetypes=[
@@ -168,99 +244,111 @@ class TranscriptApp(ctk.CTk):
             self.output_entry.delete(0, "end")
             self.output_entry.insert(0, filename)
 
-    def update_status(self, message: str, color: str) -> None:
-        """Thread-safe status update."""
-        self.after(
-            0,
-            lambda: self.status_label.configure(text=message, text_color=color),
-        )
+    # ── Thread-safe UI updates ───────────────────────────────────────
+
+    def _update_status(self, message: str, color: str) -> None:
+        self.after(0, lambda: self.status_label.configure(text=message, text_color=color))
+
+    def _append_log(self, text: str) -> None:
+        """Thread-safe log box append."""
+        def _write() -> None:
+            self.log_box.configure(state="normal")
+            self.log_box.insert("end", text + "\n")
+            self.log_box.see("end")
+            self.log_box.configure(state="disabled")
+        self.after(0, _write)
 
     def _set_progress(self, value: float) -> None:
-        """Thread-safe progress bar update (0.0 - 1.0)."""
         self.after(0, lambda: self.progress_bar.set(value))
 
     def _request_cancel(self) -> None:
-        """Signal the background thread to stop."""
         self._cancel_event.set()
-        self.update_status("Cancelling...", "orange")
+        self._update_status("Cancelling...", "orange")
+        self._append_log("[!] Cancel requested -- waiting for current step...")
 
     def _set_running(self, running: bool) -> None:
-        """Toggle button states between running / idle."""
         def _apply() -> None:
             if running:
-                self.generate_button.configure(state="disabled")
-                self.cancel_button.configure(state="normal", fg_color="#d9534f")
+                self.generate_btn.configure(state="disabled")
+                self.cancel_btn.configure(state="normal", fg_color=_DANGER, hover_color=_DANGER_HOVER)
             else:
-                self.generate_button.configure(state="normal")
-                self.cancel_button.configure(state="disabled", fg_color="gray")
+                self.generate_btn.configure(state="normal")
+                self.cancel_btn.configure(state="disabled", fg_color=_MUTED)
         self.after(0, _apply)
 
     # ------------------------------------------------------------------
     # Generation
     # ------------------------------------------------------------------
 
-    def start_generation_thread(self) -> None:
+    def _start_generation(self) -> None:
         url = self.url_entry.get().strip()
         if not url:
-            self.update_status("Please enter a URL.", "red")
+            self._update_status("Please enter a URL.", "red")
+            return
+        if not url.startswith(("http://", "https://")):
+            self._update_status("Invalid URL -- must start with http:// or https://", "red")
             return
 
-        if not url.startswith(("http://", "https://")):
-            self.update_status("Invalid URL. Must start with http:// or https://", "red")
-            return
+        # Clear log
+        self.after(0, lambda: (
+            self.log_box.configure(state="normal"),
+            self.log_box.delete("1.0", "end"),
+            self.log_box.configure(state="disabled"),
+        ))
 
         self._cancel_event.clear()
         self._set_running(True)
-        self.update_status("Starting...", "blue")
+        self._update_status("Starting...", _ACCENT)
         self._set_progress(0)
 
-        thread = threading.Thread(
-            target=self._run_generation, args=(url,), daemon=True,
-        )
-        thread.start()
+        threading.Thread(target=self._run, args=(url,), daemon=True).start()
 
-    def _run_generation(self, url: str) -> None:
-        """Background worker -- calls the shared workflow."""
-        model_name = self.model_option_menu.get()
-        keep_audio = bool(self.keep_audio_checkbox.get())
-        custom_output = self.output_entry.get().strip() or None
-        output_format = self.format_option_menu.get()
-        language = self.language_entry.get().strip() or None
+    def _run(self, url: str) -> None:
+        model = self.model_menu.get()
+        keep = bool(self.keep_audio_switch.get())
+        output = self.output_entry.get().strip() or None
+        fmt = self.format_menu.get()
+        lang = self.language_entry.get().strip() or None
 
         step = 0
-        total_steps = 3  # download, transcribe, write
+        total = 3
 
         def on_status(msg: str) -> None:
             nonlocal step
             step += 1
-            self._set_progress(min(step / total_steps, 0.95))
-            self.update_status(msg, "orange")
+            self._set_progress(min(step / total, 0.95))
+            self._update_status(msg, "orange")
+            self._append_log(f"[{step}/{total}] {msg}")
 
         try:
             if self._cancel_event.is_set():
-                self.update_status("Cancelled.", "gray")
+                self._update_status("Cancelled.", _MUTED)
+                self._append_log("[x] Cancelled before start.")
                 return
 
-            output = generate_transcript(
+            result_path = generate_transcript(
                 url=url,
-                model_name=model_name,
-                output_path=custom_output,
-                keep_audio=keep_audio,
-                output_format=output_format,
-                language=language,
+                model_name=model,
+                output_path=output,
+                keep_audio=keep,
+                output_format=fmt,
+                language=lang,
                 on_status=on_status,
             )
 
             if self._cancel_event.is_set():
-                self.update_status("Cancelled.", "gray")
+                self._update_status("Cancelled.", _MUTED)
+                self._append_log("[x] Cancelled.")
                 return
 
             self._set_progress(1.0)
-            self.update_status(f"Success! Saved to {output}", "green")
+            self._update_status(f"Done -- saved to {os.path.basename(result_path)}", _SUCCESS)
+            self._append_log(f"[OK] Transcript saved to {result_path}")
 
         except Exception as exc:
             log.exception("Generation failed")
-            self.update_status(f"Error: {exc}", "red")
+            self._update_status(f"Error: {exc}", "red")
+            self._append_log(f"[ERROR] {exc}")
 
         finally:
             self._set_running(False)

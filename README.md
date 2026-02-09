@@ -1,114 +1,164 @@
-# M3U8 Transcript Generator
+<p align="center">
+  <img src="./assets/header.png" alt="M3U8 Transcript Generator" width="100%">
+</p>
 
-![M3U8 Transcript Generator](./assets/header.png)
+<p align="center">
+  <strong>Download audio from m3u8 streams, transcribe with Whisper, and export to PDF, SRT, or TXT.</strong>
+</p>
 
-A powerful Python tool that downloads audio from m3u8 streams (including complex Mediasite streams), transcribes it using [OpenAI Whisper](https://github.com/openai/whisper), and generates clean, timestamped transcripts in **PDF**, **SRT**, or **TXT** format. Features a modern GUI with progress tracking!
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.9+-blue?logo=python&logoColor=white" alt="Python 3.9+">
+  <img src="https://img.shields.io/badge/whisper-local_AI-orange?logo=openai&logoColor=white" alt="Whisper">
+  <img src="https://img.shields.io/badge/output-PDF%20%7C%20SRT%20%7C%20TXT-green" alt="Formats">
+  <img src="https://img.shields.io/badge/GUI-CustomTkinter-purple" alt="GUI">
+  <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License">
+</p>
+
+---
 
 ## Features
 
-- **Robust Downloading** -- Uses `yt-dlp` to handle complex HLS streams and authentication tokens.
-- **Accurate Transcription** -- Powered by OpenAI's Whisper models (runs locally, no API keys needed).
-- **Multiple Output Formats** -- PDF (with metadata), SRT subtitles, or plain text.
-- **Language Selection** -- Auto-detect or specify a language for better accuracy.
-- **Modern GUI** -- CustomTkinter interface with progress bar and cancel support.
-- **Automatic Organization** -- Saves transcripts to a `transcripts/` folder with timestamps.
-- **Model Caching** -- Whisper models are cached in memory for faster repeated use.
+| | Feature | Description |
+|---|---------|-------------|
+| **1** | **Robust Downloading** | Uses `yt-dlp` to handle complex HLS streams and authentication tokens |
+| **2** | **Accurate Transcription** | Powered by OpenAI's Whisper models -- runs locally, no API keys needed |
+| **3** | **Multiple Output Formats** | Export as PDF (with metadata), SRT subtitles, or plain text |
+| **4** | **Language Selection** | Auto-detect or specify a language for better accuracy |
+| **5** | **Modern GUI** | CustomTkinter interface with progress bar, output log, and cancel support |
+| **6** | **Dark / Light Theme** | System, Dark, and Light appearance modes |
+| **7** | **Model Caching** | Whisper models are cached in memory for faster repeated use |
+| **8** | **Auto Organization** | Saves transcripts to `transcripts/` with timestamps |
+
+---
 
 ## Interface
 
-![GUI Screenshot](./assets/gui.png)
+<p align="center">
+  <img src="./assets/gui_dark.png" alt="GUI - Dark Mode" width="520">
+</p>
+
+<p align="center"><em>Dark mode with output log, progress bar, format selector, and theme toggle.</em></p>
+
+---
 
 ## Workflow
 
 ```mermaid
-graph TD
-    A[Input M3U8 URL] --> B{Download Audio}
-    B -->|yt-dlp| C[Temp MP3 File]
-    C -->|Whisper Model| D[Transcription Segments]
-    D --> E{Output Format}
-    E -->|PDF| F[Timestamped PDF with metadata]
-    E -->|SRT| G[SRT Subtitle File]
-    E -->|TXT| H[Plain Text Transcript]
+graph LR
+    A["M3U8 URL"] -->|yt-dlp| B["MP3 Audio"]
+    B -->|Whisper| C["Segments"]
+    C --> D{"Format?"}
+    D -->|PDF| E["Timestamped PDF"]
+    D -->|SRT| F["SRT Subtitles"]
+    D -->|TXT| G["Plain Text"]
 ```
+
+---
 
 ## Prerequisites
 
-- Python 3.9+
-- [FFmpeg](https://ffmpeg.org/download.html) installed and on your system PATH.
+- **Python 3.9+**
+- **[FFmpeg](https://ffmpeg.org/download.html)** installed and on your system PATH
+
+---
 
 ## Installation
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/guirguispierre/m3u8-transcript.git
-   cd m3u8-transcript
-   ```
+**Clone and install:**
 
-2. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+git clone https://github.com/guirguispierre/m3u8-transcript.git
+cd m3u8-transcript
+pip install -r requirements.txt
+```
 
-   Or install as a package:
-   ```bash
-   pip install -e .
-   ```
+Or install as an editable package:
+
+```bash
+pip install -e .
+```
+
+---
 
 ## Usage
 
-### Graphical Interface (Recommended)
-Launch the GUI to easily paste URLs and configure options:
+### GUI (Recommended)
+
+```bash
+python3 main.py
+```
+
+Or explicitly:
+
 ```bash
 python3 main.py --gui
 ```
-*Or simply run `python3 main.py` without arguments.*
 
-### Command Line Interface
+### CLI
 
-**Basic Run (PDF output):**
+**Basic (PDF output):**
 ```bash
 python3 main.py "YOUR_M3U8_URL"
 ```
 
-**Generate SRT subtitles:**
+**SRT subtitles:**
 ```bash
 python3 main.py "URL" -f srt
 ```
 
-**Generate plain text:**
+**Plain text with custom name:**
 ```bash
 python3 main.py "URL" -f txt -o lecture_notes.txt
 ```
 
-**All Options:**
-
-| Flag | Description |
-|------|-------------|
-| `-o`, `--output` | Custom output filename/path |
-| `-f`, `--format` | Output format: `pdf`, `srt`, `txt` (default: `pdf`) |
-| `-m`, `--model` | Whisper model: `tiny`, `base`, `small`, `medium`, `large` (default: `base`) |
-| `-l`, `--language` | ISO-639-1 language code (e.g. `en`, `fr`). Auto-detects if omitted |
-| `--keep-audio` | Keep the downloaded MP3 file |
-| `-v`, `--verbose` | Enable verbose (DEBUG) logging |
-| `--gui` | Launch the GUI interface |
-
-**Examples:**
+**Medium model, French, keep audio:**
 ```bash
-# Transcribe with the medium model in French
-python3 main.py "URL" -m medium -l fr
-
-# Keep the audio and use verbose logging
-python3 main.py "URL" --keep-audio -v
-
-# Custom output with SRT format
-python3 main.py "URL" -f srt -o lecture.srt
+python3 main.py "URL" -m medium -l fr --keep-audio
 ```
+
+### All Options
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-f`, `--format` | Output format: `pdf`, `srt`, `txt` | `pdf` |
+| `-m`, `--model` | Whisper model: `tiny`, `base`, `small`, `medium`, `large` | `base` |
+| `-l`, `--language` | ISO-639-1 language code (e.g. `en`, `fr`) | auto-detect |
+| `-o`, `--output` | Custom output filename/path | auto-generated |
+| `--keep-audio` | Keep the downloaded MP3 file | off |
+| `-v`, `--verbose` | Enable DEBUG-level logging | off |
+| `--gui` | Launch the GUI interface | -- |
+
+---
+
+## Project Structure
+
+```
+m3u8Transcript/
+├── main.py            # CLI entry point and argument parsing
+├── gui.py             # CustomTkinter GUI application
+├── workflow.py        # Shared download -> transcribe -> write pipeline
+├── transcriber.py     # yt-dlp download + Whisper transcription
+├── writers.py         # PDF, SRT, and TXT output writers
+├── pdf_writer.py      # Backward-compatible PDF shim
+├── logger.py          # Centralized logging configuration
+├── test_pdf_gen.py    # Test suite (pytest)
+├── pyproject.toml     # Package metadata and build config
+├── requirements.txt   # Pinned dependencies
+├── assets/
+│   ├── header.png     # README banner
+│   └── gui_dark.png   # GUI screenshot
+└── transcripts/       # Default output directory (auto-created)
+```
+
+---
 
 ## Running Tests
 
 ```bash
 pytest -v
 ```
+
+---
 
 ## Credits
 
