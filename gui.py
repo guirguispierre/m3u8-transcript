@@ -2,13 +2,15 @@ import customtkinter as ctk
 import threading
 import os
 from datetime import datetime
-from transcriber import download_audio, transcribe_audio
+
+from transcriber import download_audio, transcribe_audio, make_temp_audio_path
 from pdf_writer import create_pdf
 
-ctk.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
-ctk.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
+ctk.set_appearance_mode("System")
+ctk.set_default_color_theme("blue")
 
 TRANSCRIPTS_DIR = "transcripts"
+
 
 class TranscriptApp(ctk.CTk):
     def __init__(self):
@@ -21,7 +23,10 @@ class TranscriptApp(ctk.CTk):
         self.grid_rowconfigure((0, 1, 2, 3, 4), weight=0)
 
         # Header
-        self.header_label = ctk.CTkLabel(self, text="M3U8 Transcript Generator", font=ctk.CTkFont(size=20, weight="bold"))
+        self.header_label = ctk.CTkLabel(
+            self, text="M3U8 Transcript Generator",
+            font=ctk.CTkFont(size=20, weight="bold"),
+        )
         self.header_label.grid(row=0, column=0, padx=20, pady=(20, 10))
 
         # URL Input
@@ -36,8 +41,11 @@ class TranscriptApp(ctk.CTk):
         # Model Selection
         self.model_label = ctk.CTkLabel(self.options_frame, text="Whisper Model:")
         self.model_label.grid(row=0, column=0, padx=10, pady=10, sticky="w")
-        
-        self.model_option_menu = ctk.CTkOptionMenu(self.options_frame, values=["tiny", "base", "small", "medium", "large"])
+
+        self.model_option_menu = ctk.CTkOptionMenu(
+            self.options_frame,
+            values=["tiny", "base", "small", "medium", "large"],
+        )
         self.model_option_menu.set("base")
         self.model_option_menu.grid(row=0, column=1, padx=10, pady=10, sticky="e")
 
@@ -50,48 +58,67 @@ class TranscriptApp(ctk.CTk):
         self.output_frame.grid(row=3, column=0, padx=20, pady=5, sticky="ew")
         self.output_frame.grid_columnconfigure(0, weight=1)
 
-        self.output_entry = ctk.CTkEntry(self.output_frame, placeholder_text="Default: transcripts/transcript_<timestamp>.pdf")
+        self.output_entry = ctk.CTkEntry(
+            self.output_frame,
+            placeholder_text="Default: transcripts/transcript_<timestamp>.pdf",
+        )
         self.output_entry.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
-        self.browse_button = ctk.CTkButton(self.output_frame, text="Save As...", width=100, command=self.browse_output_file)
+        self.browse_button = ctk.CTkButton(
+            self.output_frame, text="Save As...", width=100,
+            command=self.browse_output_file,
+        )
         self.browse_button.grid(row=0, column=1, padx=10, pady=10)
 
         # Generate Button
-        self.generate_button = ctk.CTkButton(self, text="Generate Transcript", command=self.start_generation_thread)
+        self.generate_button = ctk.CTkButton(
+            self, text="Generate Transcript",
+            command=self.start_generation_thread,
+        )
         self.generate_button.grid(row=4, column=0, padx=20, pady=20)
 
         # Status Label
         self.status_label = ctk.CTkLabel(self, text="Ready", text_color="gray")
         self.status_label.grid(row=5, column=0, padx=20, pady=(0, 20))
 
-        # Footer (Made with Love)
-        self.footer_label = ctk.CTkLabel(self, text="Made by Pierre Guirguis with love", font=ctk.CTkFont(size=12, slant="italic"))
+        # Footer
+        self.footer_label = ctk.CTkLabel(
+            self, text="Made by Pierre Guirguis with love",
+            font=ctk.CTkFont(size=12, slant="italic"),
+        )
         self.footer_label.grid(row=6, column=0, padx=20, pady=10, sticky="s")
-        self.grid_rowconfigure(6, weight=1) # Push footer to bottom
+        self.grid_rowconfigure(6, weight=1)
 
     def browse_output_file(self):
-        filename = ctk.filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
+        filename = ctk.filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF files", "*.pdf")],
+        )
         if filename:
             self.output_entry.delete(0, "end")
             self.output_entry.insert(0, filename)
 
     def start_generation_thread(self):
-        url = self.url_entry.get()
+        url = self.url_entry.get().strip()
         if not url:
-            self.status_label.configure(text="Please enter a URL", text_color="red")
+            self.update_status("Please enter a URL.", "red")
+            return
+
+        if not url.startswith(("http://", "https://")):
+            self.update_status("Invalid URL. Must start with http:// or https://", "red")
             return
 
         self.generate_button.configure(state="disabled")
-        self.status_label.configure(text="Starting...", text_color="blue")
-        
-        thread = threading.Thread(target=self.generate_transcript, args=(url,))
+        self.update_status("Starting...", "blue")
+
+        thread = threading.Thread(target=self.generate_transcript, args=(url,), daemon=True)
         thread.start()
 
-    def generate_transcript(self, url):
+    def generate_transcript(self, url: str):
         model_name = self.model_option_menu.get()
         keep_audio = self.keep_audio_checkbox.get()
-        custom_output = self.output_entry.get()
-        audio_filename = "temp_audio.mp3"
+        custom_output = self.output_entry.get().strip()
+        audio_filename = make_temp_audio_path()
 
         try:
             # 1. Download
@@ -101,11 +128,10 @@ class TranscriptApp(ctk.CTk):
             # 2. Transcribe
             self.update_status(f"Transcribing with '{model_name}' model...", "orange")
             result = transcribe_audio(audio_filename, model_name=model_name)
-            
+
             # 3. Generate PDF
             if custom_output:
                 output_filename = custom_output
-                # Ensure directory exists if it's a path
                 output_dir = os.path.dirname(output_filename)
                 if output_dir:
                     os.makedirs(output_dir, exist_ok=True)
@@ -113,28 +139,28 @@ class TranscriptApp(ctk.CTk):
                 os.makedirs(TRANSCRIPTS_DIR, exist_ok=True)
                 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 output_filename = os.path.join(TRANSCRIPTS_DIR, f"transcript_{timestamp}.pdf")
-            
+
             self.update_status("Generating PDF...", "orange")
-            create_pdf(result['segments'], output_filename)
-            
+            create_pdf(result["segments"], output_filename)
+
             self.update_status(f"Success! Saved to {output_filename}", "green")
 
         except Exception as e:
             self.update_status(f"Error: {e}", "red")
         finally:
-            # Cleanup
             if not keep_audio and os.path.exists(audio_filename):
-                # Ensure we don't hold onto the file
                 try:
                     os.remove(audio_filename)
-                    print(f"Removed temporary file {audio_filename}")
-                except Exception as cleanup_error:
+                except OSError as cleanup_error:
                     print(f"Failed to remove temp file: {cleanup_error}")
-            
-            self.generate_button.configure(state="normal")
 
-    def update_status(self, message, color):
-        self.status_label.configure(text=message, text_color=color)
+            # Re-enable button on the main thread
+            self.after(0, lambda: self.generate_button.configure(state="normal"))
+
+    def update_status(self, message: str, color: str):
+        """Thread-safe status update -- schedules the change on the main thread."""
+        self.after(0, lambda: self.status_label.configure(text=message, text_color=color))
+
 
 if __name__ == "__main__":
     app = TranscriptApp()

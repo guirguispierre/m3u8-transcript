@@ -1,7 +1,29 @@
 __pycache__/
+*.pyc
+*.pyo
+
+# Audio/video temp files
 *.mp3
 *.mp4
+*.part
+*.ytdl
+
+# Output
 *.pdf
+transcripts/
+
+# Virtual environment
 venv/
+.venv/
+
+# OS
 .DS_Store
+
+# Secrets
 .env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
