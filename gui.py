@@ -1,19 +1,25 @@
-import customtkinter as ctk
-import threading
-import os
-from datetime import datetime
+"""GUI application for the M3U8 Transcript Generator."""
 
-from transcriber import download_audio, transcribe_audio, make_temp_audio_path
-from pdf_writer import create_pdf
+import logging
+import threading
+
+import customtkinter as ctk
+
+from logger import setup_logging
+from workflow import generate_transcript
+
+# Initialise logging (GUI might be launched directly)
+setup_logging()
+log = logging.getLogger(__name__)
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
-TRANSCRIPTS_DIR = "transcripts"
-
 
 class TranscriptApp(ctk.CTk):
-    def __init__(self):
+    """Main GUI window."""
+
+    def __init__(self) -> None:
         super().__init__()
 
         self.title("M3U8 Transcript Generator")
@@ -50,7 +56,9 @@ class TranscriptApp(ctk.CTk):
         self.model_option_menu.grid(row=0, column=1, padx=10, pady=10, sticky="e")
 
         # Keep Audio Checkbox
-        self.keep_audio_checkbox = ctk.CTkCheckBox(self.options_frame, text="Keep Audio File")
+        self.keep_audio_checkbox = ctk.CTkCheckBox(
+            self.options_frame, text="Keep Audio File",
+        )
         self.keep_audio_checkbox.grid(row=1, column=0, columnspan=2, padx=10, pady=10)
 
         # Output File Selection
@@ -89,7 +97,11 @@ class TranscriptApp(ctk.CTk):
         self.footer_label.grid(row=6, column=0, padx=20, pady=10, sticky="s")
         self.grid_rowconfigure(6, weight=1)
 
-    def browse_output_file(self):
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def browse_output_file(self) -> None:
         filename = ctk.filedialog.asksaveasfilename(
             defaultextension=".pdf",
             filetypes=[("PDF files", "*.pdf")],
@@ -98,7 +110,18 @@ class TranscriptApp(ctk.CTk):
             self.output_entry.delete(0, "end")
             self.output_entry.insert(0, filename)
 
-    def start_generation_thread(self):
+    def update_status(self, message: str, color: str) -> None:
+        """Thread-safe status update -- schedules the change on the main thread."""
+        self.after(
+            0,
+            lambda: self.status_label.configure(text=message, text_color=color),
+        )
+
+    # ------------------------------------------------------------------
+    # Generation
+    # ------------------------------------------------------------------
+
+    def start_generation_thread(self) -> None:
         url = self.url_entry.get().strip()
         if not url:
             self.update_status("Please enter a URL.", "red")
@@ -111,55 +134,33 @@ class TranscriptApp(ctk.CTk):
         self.generate_button.configure(state="disabled")
         self.update_status("Starting...", "blue")
 
-        thread = threading.Thread(target=self.generate_transcript, args=(url,), daemon=True)
+        thread = threading.Thread(
+            target=self._run_generation, args=(url,), daemon=True,
+        )
         thread.start()
 
-    def generate_transcript(self, url: str):
+    def _run_generation(self, url: str) -> None:
+        """Background worker -- calls the shared workflow."""
         model_name = self.model_option_menu.get()
-        keep_audio = self.keep_audio_checkbox.get()
-        custom_output = self.output_entry.get().strip()
-        audio_filename = make_temp_audio_path()
+        keep_audio = bool(self.keep_audio_checkbox.get())
+        custom_output = self.output_entry.get().strip() or None
 
         try:
-            # 1. Download
-            self.update_status("Downloading audio...", "orange")
-            download_audio(url, audio_filename)
+            output = generate_transcript(
+                url=url,
+                model_name=model_name,
+                output_path=custom_output,
+                keep_audio=keep_audio,
+                on_status=lambda msg: self.update_status(msg, "orange"),
+            )
+            self.update_status(f"Success! Saved to {output}", "green")
 
-            # 2. Transcribe
-            self.update_status(f"Transcribing with '{model_name}' model...", "orange")
-            result = transcribe_audio(audio_filename, model_name=model_name)
+        except Exception as exc:
+            log.exception("Generation failed")
+            self.update_status(f"Error: {exc}", "red")
 
-            # 3. Generate PDF
-            if custom_output:
-                output_filename = custom_output
-                output_dir = os.path.dirname(output_filename)
-                if output_dir:
-                    os.makedirs(output_dir, exist_ok=True)
-            else:
-                os.makedirs(TRANSCRIPTS_DIR, exist_ok=True)
-                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                output_filename = os.path.join(TRANSCRIPTS_DIR, f"transcript_{timestamp}.pdf")
-
-            self.update_status("Generating PDF...", "orange")
-            create_pdf(result["segments"], output_filename)
-
-            self.update_status(f"Success! Saved to {output_filename}", "green")
-
-        except Exception as e:
-            self.update_status(f"Error: {e}", "red")
         finally:
-            if not keep_audio and os.path.exists(audio_filename):
-                try:
-                    os.remove(audio_filename)
-                except OSError as cleanup_error:
-                    print(f"Failed to remove temp file: {cleanup_error}")
-
-            # Re-enable button on the main thread
             self.after(0, lambda: self.generate_button.configure(state="normal"))
-
-    def update_status(self, message: str, color: str):
-        """Thread-safe status update -- schedules the change on the main thread."""
-        self.after(0, lambda: self.status_label.configure(text=message, text_color=color))
 
 
 if __name__ == "__main__":

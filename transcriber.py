@@ -1,10 +1,21 @@
-import subprocess
+"""Audio downloading and transcription utilities."""
+
+import logging
 import os
+import subprocess
 import tempfile
+from typing import Any, Dict, Optional
+
 import whisper
 
+log = logging.getLogger(__name__)
 
 VALID_MODELS = {"tiny", "base", "small", "medium", "large"}
+
+# ---------------------------------------------------------------------------
+# Model cache -- avoids reloading the same Whisper model repeatedly
+# ---------------------------------------------------------------------------
+_model_cache: Dict[str, Any] = {}
 
 
 def make_temp_audio_path() -> str:
@@ -16,7 +27,7 @@ def make_temp_audio_path() -> str:
 
 def download_audio(m3u8_url: str, output_path: str) -> str:
     """
-    Downloads audio from an m3u8 stream and saves it as an MP3 file using yt-dlp.
+    Download audio from an m3u8 stream and save it as an MP3 file using yt-dlp.
 
     Args:
         m3u8_url: The URL to download audio from.
@@ -35,47 +46,68 @@ def download_audio(m3u8_url: str, output_path: str) -> str:
 
     m3u8_url = m3u8_url.strip()
     if not m3u8_url.startswith(("http://", "https://")):
-        raise ValueError(f"Invalid URL (must start with http:// or https://): {m3u8_url}")
+        raise ValueError(
+            f"Invalid URL (must start with http:// or https://): {m3u8_url}"
+        )
+
+    log.info("Downloading audio from %s using yt-dlp...", m3u8_url)
+
+    base_name = os.path.splitext(output_path)[0]
+
+    cmd = [
+        "yt-dlp",
+        "--extract-audio",
+        "--audio-format", "mp3",
+        "--output", f"{base_name}.%(ext)s",
+        "--force-overwrites",
+        "--no-check-certificates",
+        m3u8_url,
+    ]
 
     try:
-        print(f"Downloading audio from {m3u8_url} using yt-dlp...")
-
-        base_name = os.path.splitext(output_path)[0]
-
-        cmd = [
-            "yt-dlp",
-            "--extract-audio",
-            "--audio-format", "mp3",
-            "--output", f"{base_name}.%(ext)s",
-            "--force-overwrites",
-            "--no-check-certificates",
-            m3u8_url
-        ]
-
         subprocess.run(cmd, check=True)
-
-        expected_file = f"{base_name}.mp3"
-        if os.path.exists(expected_file):
-            print(f"Audio saved to {expected_file}")
-            return expected_file
-        else:
-            raise FileNotFoundError(f"yt-dlp finished but {expected_file} was not found.")
-
-    except subprocess.CalledProcessError as e:
-        print(f"An error occurred while downloading audio with yt-dlp: {e}")
+    except subprocess.CalledProcessError as exc:
+        log.error("yt-dlp failed: %s", exc)
         raise
 
+    expected_file = f"{base_name}.mp3"
+    if os.path.exists(expected_file):
+        log.info("Audio saved to %s", expected_file)
+        return expected_file
 
-def transcribe_audio(audio_path: str, model_name: str = "base") -> dict:
+    raise FileNotFoundError(
+        f"yt-dlp finished but {expected_file} was not found."
+    )
+
+
+def _load_model(model_name: str) -> Any:
+    """Load (or return cached) Whisper model."""
+    if model_name in _model_cache:
+        log.debug("Using cached Whisper model '%s'", model_name)
+        return _model_cache[model_name]
+
+    log.info("Loading Whisper model '%s'...", model_name)
+    model = whisper.load_model(model_name)
+    _model_cache[model_name] = model
+    return model
+
+
+def transcribe_audio(
+    audio_path: str,
+    model_name: str = "base",
+    language: Optional[str] = None,
+) -> dict:
     """
-    Transcribes an audio file using OpenAI's Whisper model.
+    Transcribe an audio file using OpenAI's Whisper model.
 
     Args:
         audio_path: Path to the audio file.
         model_name: Whisper model size (tiny, base, small, medium, large).
+        language: Optional ISO-639-1 language code (e.g. ``"en"``).
+                  If *None*, Whisper auto-detects the language.
 
     Returns:
-        Whisper result dict containing 'text' and 'segments'.
+        Whisper result dict containing ``text`` and ``segments``.
 
     Raises:
         ValueError: If the model name is invalid.
@@ -83,15 +115,19 @@ def transcribe_audio(audio_path: str, model_name: str = "base") -> dict:
     """
     if model_name not in VALID_MODELS:
         raise ValueError(
-            f"Invalid model '{model_name}'. Choose from: {', '.join(sorted(VALID_MODELS))}"
+            f"Invalid model '{model_name}'. "
+            f"Choose from: {', '.join(sorted(VALID_MODELS))}"
         )
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
-    print(f"Loading Whisper model '{model_name}'...")
-    model = whisper.load_model(model_name)
+    model = _load_model(model_name)
 
-    print(f"Transcribing {audio_path}...")
-    result = model.transcribe(audio_path)
+    log.info("Transcribing %s...", audio_path)
 
+    kwargs: Dict[str, Any] = {}
+    if language:
+        kwargs["language"] = language
+
+    result = model.transcribe(audio_path, **kwargs)
     return result

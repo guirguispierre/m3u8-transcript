@@ -1,17 +1,19 @@
+"""CLI entry point for the M3U8 Transcript Generator."""
+
 import argparse
-import os
-import traceback
-from datetime import datetime
+import logging
+import sys
 
-from transcriber import download_audio, transcribe_audio, make_temp_audio_path, VALID_MODELS
-from pdf_writer import create_pdf
+from logger import setup_logging
+from transcriber import VALID_MODELS
+from workflow import generate_transcript
 
-TRANSCRIPTS_DIR = "transcripts"
+log = logging.getLogger(__name__)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Convert m3u8 audio stream to PDF transcript."
+        description="Convert m3u8 audio stream to PDF transcript.",
     )
     parser.add_argument("url", nargs="?", help="The m3u8 URL to transcribe.")
     parser.add_argument(
@@ -35,46 +37,39 @@ def main():
         action="store_true",
         help="Launch the GUI interface.",
     )
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Enable verbose (DEBUG) logging.",
+    )
 
     args = parser.parse_args()
 
+    # Configure logging
+    level = logging.DEBUG if args.verbose else logging.INFO
+    setup_logging(level=level)
+
     # Launch GUI if no URL provided OR --gui flag is set
     if args.gui or not args.url:
-        print("Launching GUI...")
+        log.info("Launching GUI...")
         from gui import TranscriptApp
         app = TranscriptApp()
         app.mainloop()
         return
 
     # CLI Mode
-    if args.output:
-        output_filename = args.output
-    else:
-        os.makedirs(TRANSCRIPTS_DIR, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        output_filename = os.path.join(TRANSCRIPTS_DIR, f"transcript_{timestamp}.pdf")
-
-    audio_filename = make_temp_audio_path()
-
     try:
-        # 1. Download
-        download_audio(args.url, audio_filename)
+        output = generate_transcript(
+            url=args.url,
+            model_name=args.model,
+            output_path=args.output,
+            keep_audio=args.keep_audio,
+        )
+        log.info("Done! Transcript saved to: %s", output)
 
-        # 2. Transcribe
-        result = transcribe_audio(audio_filename, model_name=args.model)
-
-        # 3. Generate PDF
-        create_pdf(result["segments"], output_filename)
-        print(f"Transcript saved to: {output_filename}")
-
-    except Exception as e:
-        print(f"Error: {e}")
-        traceback.print_exc()
-    finally:
-        # Cleanup
-        if not args.keep_audio and os.path.exists(audio_filename):
-            os.remove(audio_filename)
-            print(f"Removed temporary file {audio_filename}")
+    except Exception:
+        log.exception("Transcript generation failed")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
