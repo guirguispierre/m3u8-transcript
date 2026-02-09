@@ -1,7 +1,8 @@
-openai-whisper
-yt-dlp
-ffmpeg-python
-fpdf2
-customtkinter
-packaging
-torch
+openai-whisper>=20231117
+yt-dlp>=2024.1.0
+ffmpeg-python>=0.2.0
+fpdf2>=2.7.0
+customtkinter>=5.2.0
+packaging>=23.0
+torch>=2.0.0
+pytest>=7.0.0

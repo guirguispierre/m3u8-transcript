@@ -7,25 +7,38 @@ import sys
 from logger import setup_logging
 from transcriber import VALID_MODELS
 from workflow import generate_transcript
+from writers import SUPPORTED_FORMATS
 
 log = logging.getLogger(__name__)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Convert m3u8 audio stream to PDF transcript.",
+        description="Convert m3u8 audio stream to a transcript (PDF, SRT, or TXT).",
     )
     parser.add_argument("url", nargs="?", help="The m3u8 URL to transcribe.")
     parser.add_argument(
         "--output", "-o",
-        help="Output PDF filename. If not specified, saves to 'transcripts/' with a timestamp.",
+        help="Output filename. If not specified, saves to 'transcripts/' with a timestamp.",
         default=None,
+    )
+    parser.add_argument(
+        "--format", "-f",
+        help="Output format (default: pdf).",
+        default="pdf",
+        choices=sorted(SUPPORTED_FORMATS),
+        dest="fmt",
     )
     parser.add_argument(
         "--model", "-m",
         help="Whisper model to use (tiny, base, small, medium, large).",
         default="base",
         choices=sorted(VALID_MODELS),
+    )
+    parser.add_argument(
+        "--language", "-l",
+        help="ISO-639-1 language code (e.g. 'en', 'fr'). Auto-detects if omitted.",
+        default=None,
     )
     parser.add_argument(
         "--keep-audio",
@@ -64,6 +77,8 @@ def main() -> None:
             model_name=args.model,
             output_path=args.output,
             keep_audio=args.keep_audio,
+            output_format=args.fmt,
+            language=args.language,
         )
         log.info("Done! Transcript saved to: %s", output)
 
